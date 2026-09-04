@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lector de Asistencia — PDF/Foto a tabla</title>
+<style>
+  :root{
+    --navy: #10202E;
+    --paper: #F1F4F6;
+    --paper-line: #D8DEE3;
+    --ink: #16232C;
+    --ink-soft: #5B6B75;
+    --amber: #E8A33D;
+    --amber-dark: #C7842A;
+    --teal: #2B7A72;
+    --teal-bg: #E4F1EF;
+    --danger: #B4432F;
+    --danger-bg: #F7E9E6;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-bottom: 60px;
+  }
+  header{
+    width:100%;
+    background: var(--navy);
+    color: #EDEFF1;
+    padding: 22px 24px 20px;
+  }
+  .header-inner{ max-width: 860px; margin: 0 auto; }
+  .eyebrow{ font-size: 12.5px; color: #9CB2C0; letter-spacing: 0.02em; margin: 0 0 4px; }
+  h1{ font-size: 22px; margin: 0 0 6px; font-weight: 650; letter-spacing: -0.01em; }
+  header p{ margin:0; font-size: 14px; color: #B9C6CE; max-width: 62ch; line-height: 1.5; }
+  main{ width: 100%; max-width: 860px; padding: 28px 24px 0; }
+
+  .dropzone{
+    padding: 34px 24px;
+    text-align: center;
+    border: 2px dashed #B9C3CA;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{ border-color: var(--amber-dark); background: #FBF3E6; }
+  .dropzone p{ margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .dropzone strong{ display:block; font-size: 15.5px; color: var(--ink); margin-bottom: 6px; font-weight: 600; }
+  .dropzone input{ display:none; }
+
+  .btn{
+    appearance: none; border: none; border-radius: 3px; font-family: var(--sans);
+    font-size: 14px; font-weight: 600; padding: 10px 16px; cursor: pointer;
+    transition: background .12s ease, opacity .12s ease;
+  }
+  .btn-primary{ background: var(--amber); color: #1A1300; }
+  .btn-primary:hover{ background: var(--amber-dark); }
+  .btn-ghost{ background: transparent; color: var(--ink-soft); border: 1px solid var(--paper-line); }
+  .btn-ghost:hover{ border-color: var(--ink-soft); color: var(--ink); }
+  .btn:disabled{ opacity: .45; cursor: not-allowed; }
+
+  section.status{ margin-top: 18px; display: none; }
+  section.status.visible{ display:block; }
+  .status-line{ display:flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); margin-bottom: 6px; }
+  .bar-track{ width:100%; height: 6px; background: var(--paper-line); border-radius: 3px; overflow: hidden; }
+  .bar-fill{ height:100%; width: 0%; background: var(--teal); transition: width .2s ease; }
+  ul.filelist{ list-style:none; margin: 14px 0 0; padding:0; font-size: 13px; }
+  ul.filelist li{ display:flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--paper-line); color: var(--ink-soft); }
+  ul.filelist li.done{ color: var(--teal); }
+  ul.filelist li.error{ color: var(--danger); }
+
+  section.sensitivity{ margin-top: 22px; display:none; }
+  section.sensitivity.visible{ display:block; }
+  .sens-card{ background:#fff; border:1px solid var(--paper-line); border-radius:3px; padding:16px 18px; }
+  .sens-head{ display:flex; justify-content: space-between; align-items:baseline; margin-bottom:8px; }
+  .sens-head h2{ font-size:14px; margin:0; font-weight:650; }
+  .sens-head span{ font-size: 12.5px; color: var(--ink-soft); }
+  input[type=range]{ width:100%; accent-color: var(--teal); }
+  .sens-labels{ display:flex; justify-content: space-between; font-size:11.5px; color: var(--ink-soft); margin-top:2px; }
+  .sens-note{ font-size: 12.5px; color: var(--ink-soft); margin-top:10px; line-height:1.5; }
+
+  section.result{ margin-top: 26px; display:none; }
+  section.result.visible{ display:block; }
+  .result-head{ display:flex; align-items:baseline; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px; }
+  .result-head h2{ font-size: 15px; margin:0; font-weight: 650; }
+  .result-head .count{ font-size: 12.5px; color: var(--ink-soft); font-weight: 400; }
+  .result-actions{ display:flex; gap: 8px; align-items:center; }
+  .copied-flag{ font-size: 13px; color: var(--teal); font-weight: 600; opacity: 0; transition: opacity .15s ease; }
+  .copied-flag.show{ opacity: 1; }
+
+  table#dataTable{
+    width:100%;
+    border-collapse: collapse;
+    background:#fff;
+    border: 1px solid var(--paper-line);
+    font-size: 13.5px;
+  }
+  table#dataTable th{
+    text-align:left;
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    font-weight: 650;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--paper-line);
+    background: #F8F9FA;
+  }
+  table#dataTable td{
+    padding: 8px 12px;
+    border-bottom: 1px solid #EEF1F3;
+    vertical-align: middle;
+  }
+  table#dataTable td.rut{ font-family: var(--mono); font-size: 13px; }
+  tr.group-row td{
+    background: var(--paper);
+    color: var(--ink-soft);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--paper-line);
+  }
+  select.firma-select{
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--paper-line);
+    background: #fff;
+    cursor: pointer;
+  }
+  select.firma-select.si{ color: var(--teal); background: var(--teal-bg); border-color: #BFDED9; }
+  select.firma-select.no{ color: var(--danger); background: var(--danger-bg); border-color: #E7C6BE; }
+  button.row-remove{
+    appearance:none; border:none; background:transparent; color: var(--ink-soft);
+    cursor:pointer; font-size: 13px; padding: 2px 6px; border-radius:3px;
+  }
+  button.row-remove:hover{ color: var(--danger); background: var(--danger-bg); }
+
+  .warning-banner{
+    margin-top: 14px;
+    background: #FBF3E6;
+    border: 1px solid #EAD2A8;
+    color: #6B4A16;
+    font-size: 13px;
+    padding: 12px 14px;
+    border-radius: 3px;
+    line-height: 1.5;
+  }
+  details.raw-fallback{ margin-top: 10px; }
+  details.raw-fallback summary{ cursor:pointer; font-size: 12.5px; color: var(--ink-soft); }
+  details.raw-fallback textarea{
+    width:100%; min-height: 160px; margin-top: 8px; font-family: var(--mono); font-size: 12.5px;
+    padding: 10px; border: 1px solid var(--paper-line); border-radius: 3px;
+  }
+
+  footer{ max-width: 860px; width:100%; padding: 30px 24px 0; font-size: 12px; color: #8B99A1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <p class="eyebrow">Contract Support — Escondida</p>
+    <h1>Lector de Asistencia</h1>
+    <p>Sube la foto o el PDF de una hoja de asistencia firmada. La app detecta las columnas Nombre y RUT, y revisa si hay firma en cada fila, para entregarte una tabla lista para pegar en Excel.</p>
+  </div>
+</header>
+
+<main>
+  <div class="dropzone" id="dropzone">
+    <strong>Arrastra tu archivo aquí</strong>
+    <p>o haz clic para elegir un PDF, JPG o PNG · puedes subir varios a la vez</p>
+    <input type="file" id="fileInput" accept="application/pdf,image/*" multiple>
+  </div>
+
+  <section class="status" id="statusSection">
+    <div class="status-line">
+      <span id="statusText">Preparando…</span>
+      <span id="statusPct">0%</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+    <ul class="filelist" id="fileList"></ul>
+  </section>
+
+  <section class="sensitivity" id="sensitivitySection">
+    <div class="sens-card">
+      <div class="sens-head">
+        <h2>Sensibilidad de detección de firma</h2>
+        <span id="sensValueLabel">Media</span>
+      </div>
+      <input type="range" id="sensSlider" min="0" max="100" value="50">
+      <div class="sens-labels"><span>Solo trazos fuertes</span><span>Detecta cualquier marca</span></div>
+      <p class="sens-note">Mueve el control y la columna Firma se recalcula al instante. Si marca "Sí" en filas vacías, baja la sensibilidad; si no detecta firmas reales, súbela. Igual puedes corregir cada fila a mano en la tabla.</p>
+    </div>
+  </section>
+
+  <section class="result" id="resultSection">
+    <div class="result-head">
+      <h2>Tabla lista para Excel <span class="count" id="rowCount"></span></h2>
+      <div class="result-actions">
+        <span class="copied-flag" id="copiedFlag">Copiado ✓</span>
+        <button class="btn btn-ghost" id="clearBtn">Limpiar</button>
+        <button class="btn btn-ghost" id="downloadBtn">Descargar Excel</button>
+        <button class="btn btn-primary" id="copyBtn">Copiar tabla</button>
+      </div>
+    </div>
+    <table id="dataTable">
+      <thead>
+        <tr><th>Nombre</th><th>RUT</th><th>Firma</th><th></th></tr>
+      </thead>
+      <tbody id="dataBody"></tbody>
+    </table>
+    <div id="warningArea"></div>
+  </section>
+</main>
+
+<footer>
+  Todo el procesamiento ocurre en tu navegador — el archivo no se sube a ningún servidor.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.0/tesseract.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

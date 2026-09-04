@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lector de Asistencia — PDF/Foto a texto</title>
+<style>
+  :root{
+    --navy: #10202E;
+    --navy-soft: #1B3446;
+    --paper: #F1F4F6;
+    --paper-line: #D8DEE3;
+    --ink: #16232C;
+    --ink-soft: #5B6B75;
+    --amber: #E8A33D;
+    --amber-dark: #C7842A;
+    --teal: #2B7A72;
+    --danger: #B4432F;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  }
+  @font-face{
+    font-family: "IBM Plex Sans";
+    src: local("Arial");
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding-bottom: 60px;
+  }
+  header{
+    width:100%;
+    background: var(--navy);
+    color: #EDEFF1;
+    padding: 22px 24px 20px;
+  }
+  .header-inner{
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .eyebrow{
+    font-size: 12.5px;
+    color: #9CB2C0;
+    letter-spacing: 0.02em;
+    margin: 0 0 4px;
+  }
+  h1{
+    font-size: 22px;
+    margin: 0 0 6px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  header p{
+    margin:0;
+    font-size: 14px;
+    color: #B9C6CE;
+    max-width: 56ch;
+    line-height: 1.5;
+  }
+  main{
+    width: 100%;
+    max-width: 760px;
+    padding: 28px 24px 0;
+  }
+  .card{
+    background: #fff;
+    border: 1px solid var(--paper-line);
+    border-radius: 3px;
+  }
+  .dropzone{
+    padding: 34px 24px;
+    text-align: center;
+    border: 2px dashed #B9C3CA;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{
+    border-color: var(--amber-dark);
+    background: #FBF3E6;
+  }
+  .dropzone p{
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+  .dropzone strong{
+    display:block;
+    font-size: 15.5px;
+    color: var(--ink);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .dropzone input{ display:none; }
+  .btn{
+    appearance: none;
+    border: none;
+    border-radius: 3px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background .12s ease, opacity .12s ease;
+  }
+  .btn-primary{
+    background: var(--amber);
+    color: #1A1300;
+  }
+  .btn-primary:hover{ background: var(--amber-dark); }
+  .btn-ghost{
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid var(--paper-line);
+  }
+  .btn-ghost:hover{ border-color: var(--ink-soft); color: var(--ink); }
+  .btn:disabled{ opacity: .45; cursor: not-allowed; }
+
+  section.status{
+    margin-top: 18px;
+    display: none;
+  }
+  section.status.visible{ display:block; }
+
+  .status-line{
+    display:flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .bar-track{
+    width:100%;
+    height: 6px;
+    background: var(--paper-line);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill{
+    height:100%;
+    width: 0%;
+    background: var(--teal);
+    transition: width .2s ease;
+  }
+  ul.filelist{
+    list-style:none;
+    margin: 14px 0 0;
+    padding:0;
+    font-size: 13px;
+  }
+  ul.filelist li{
+    display:flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--paper-line);
+    color: var(--ink-soft);
+  }
+  ul.filelist li.done{ color: var(--teal); }
+  ul.filelist li.error{ color: var(--danger); }
+
+  section.result{
+    margin-top: 26px;
+    display:none;
+  }
+  section.result.visible{ display:block; }
+  .result-head{
+    display:flex;
+    align-items:baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .result-head h2{
+    font-size: 15px;
+    margin:0;
+    font-weight: 650;
+  }
+  .result-actions{
+    display:flex;
+    gap: 8px;
+  }
+  textarea#output{
+    width: 100%;
+    min-height: 320px;
+    resize: vertical;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 16px;
+    border: 1px solid var(--paper-line);
+    border-radius: 3px;
+    background: #fff;
+    color: var(--ink);
+    background-image: repeating-linear-gradient(to bottom, transparent, transparent 24px, #EEF1F3 25px);
+  }
+  .tip{
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .copied-flag{
+    font-size: 13px;
+    color: var(--teal);
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .copied-flag.show{ opacity: 1; }
+
+  footer{
+    max-width: 760px;
+    width:100%;
+    padding: 30px 24px 0;
+    font-size: 12px;
+    color: #8B99A1;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <p class="eyebrow">Contract Support — Escondida</p>
+    <h1>Lector de Asistencia</h1>
+    <p>Sube la foto o el PDF de una hoja de asistencia firmada. La app reconoce el texto de cada página y te lo entrega en un cuadro que puedes copiar y pegar directo en Excel.</p>
+  </div>
+</header>
+
+<main>
+  <div class="dropzone" id="dropzone">
+    <strong>Arrastra tu archivo aquí</strong>
+    <p>o haz clic para elegir un PDF, JPG o PNG · puedes subir varios a la vez</p>
+    <input type="file" id="fileInput" accept="application/pdf,image/*" multiple>
+  </div>
+
+  <section class="status" id="statusSection">
+    <div class="status-line">
+      <span id="statusText">Preparando…</span>
+      <span id="statusPct">0%</span>
+    </div>
+    <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+    <ul class="filelist" id="fileList"></ul>
+  </section>
+
+  <section class="result" id="resultSection">
+    <div class="result-head">
+      <h2>Texto reconocido</h2>
+      <div class="result-actions">
+        <span class="copied-flag" id="copiedFlag">Copiado ✓</span>
+        <button class="btn btn-ghost" id="clearBtn">Limpiar</button>
+        <button class="btn btn-primary" id="copyBtn">Copiar todo</button>
+      </div>
+    </div>
+    <textarea id="output" spellcheck="false" placeholder="Aquí aparecerá el texto extraído…"></textarea>
+    <p class="tip">Consejo: al pegar en Excel, si las columnas quedan todas juntas en una celda, selecciona la columna y usa <strong>Datos → Texto en columnas</strong> para separarlas por espacios.</p>
+  </section>
+</main>
+
+<footer>
+  Todo el procesamiento ocurre en tu navegador — el archivo no se sube a ningún servidor.
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.0/tesseract.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const statusSection = document.getElementById('statusSection');
+  const statusText = document.getElementById('statusText');
+  const statusPct = document.getElementById('statusPct');
+  const barFill = document.getElementById('barFill');
+  const fileList = document.getElementById('fileList');
+  const resultSection = document.getElementById('resultSection');
+  const output = document.getElementById('output');
+  const copyBtn = document.getElementById('copyBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const copiedFlag = document.getElementById('copiedFlag');
+
+  let worker = null;
+  let processing = false;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFiles(e.target.files);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    output.value = '';
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!output.value) return;
+    try {
+      await navigator.clipboard.writeText(output.value);
+    } catch (err) {
+      output.select();
+      document.execCommand('copy');
+    }
+    copiedFlag.classList.add('show');
+    setTimeout(() => copiedFlag.classList.remove('show'), 1600);
+  });
+
+  function setStatus(text, pct){
+    statusText.textContent = text;
+    statusPct.textContent = Math.round(pct) + '%';
+    barFill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+  }
+
+  function addFileRow(name){
+    const li = document.createElement('li');
+    li.dataset.name = name;
+    li.innerHTML = `<span>${name}</span><span class="state">En cola</span>`;
+    fileList.appendChild(li);
+    return li;
+  }
+
+  function setRowState(row, state, className){
+    row.querySelector('.state').textContent = state;
+    row.className = className || '';
+  }
+
+  async function getWorker(){
+    if (worker) return worker;
+    worker = await Tesseract.createWorker('spa', 1, {
+      logger: () => {}
+    });
+    return worker;
+  }
+
+  async function ocrImageSource(source){
+    const w = await getWorker();
+    const { data } = await w.recognize(source);
+    return data.text;
+  }
+
+  async function processPdf(file, row){
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++){
+      setRowState(row, `Página ${i}/${pdf.numPages}…`);
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const pageText = await ocrImageSource(canvas);
+      text += `----- ${file.name} (página ${i} de ${pdf.numPages}) -----\n${pageText.trim()}\n\n`;
+    }
+    return text;
+  }
+
+  async function processImage(file, row){
+    setRowState(row, 'Reconociendo…');
+    const text = await ocrImageSource(file);
+    return `----- ${file.name} -----\n${text.trim()}\n\n`;
+  }
+
+  async function handleFiles(fileListRaw){
+    if (processing) return;
+    const files = Array.from(fileListRaw);
+    processing = true;
+    fileList.innerHTML = '';
+    statusSection.classList.add('visible');
+    resultSection.classList.add('visible');
+    setStatus('Preparando…', 2);
+
+    const rows = files.map(f => addFileRow(f.name));
+    let combined = '';
+
+    for (let idx = 0; idx < files.length; idx++){
+      const file = files[idx];
+      const row = rows[idx];
+      setRowState(row, 'Procesando…');
+      setStatus(`Procesando ${file.name} (${idx + 1} de ${files.length})`, (idx / files.length) * 100);
+      try {
+        let text;
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          text = await processPdf(file, row);
+        } else {
+          text = await processImage(file, row);
+        }
+        combined += text;
+        setRowState(row, 'Listo', 'done');
+      } catch (err) {
+        console.error(err);
+        setRowState(row, 'Error al leer', 'error');
+      }
+      setStatus(`Procesando (${idx + 1} de ${files.length})`, ((idx + 1) / files.length) * 100);
+    }
+
+    output.value = (output.value ? output.value + '\n' : '') + combined.trim();
+    setStatus('Listo', 100);
+    processing = false;
+    fileInput.value = '';
+  }
+</script>
+
+</body>
+</html>

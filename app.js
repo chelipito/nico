@@ -138,6 +138,42 @@
   // Chilean RUT, with or without dots: 12.345.678-9 / 12345678-9 / 1.234.567-K
   const RUT_REGEX = /\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]/;
 
+  // Upscales small/blurry images and boosts contrast before OCR — helps a lot with
+  // real phone photos (uneven lighting, small resolution) at basically no cost for
+  // already-sharp PDF pages.
+  function preprocessCanvas(srcCanvas){
+    const targetWidth = 2200;
+    const scale = srcCanvas.width < targetWidth ? targetWidth / srcCanvas.width : 1;
+    const w = Math.round(srcCanvas.width * scale);
+    const h = Math.round(srcCanvas.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(srcCanvas, 0, 0, w, h);
+
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const d = imgData.data;
+    const total = w * h;
+    const lum = new Float32Array(total);
+    let min = 255, max = 0;
+    for (let i = 0, p = 0; i < d.length; i += 4, p++){
+      const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      lum[p] = l;
+      if (l < min) min = l;
+      if (l > max) max = l;
+    }
+    const range = Math.max(1, max - min);
+    for (let i = 0, p = 0; i < d.length; i += 4, p++){
+      const v = Math.max(0, Math.min(255, Math.round((lum[p] - min) * 255 / range)));
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  }
+
   function findRutWord(words){
     const sorted = words.slice().sort((a, b) => a.bbox.x0 - b.bbox.x0);
     for (const w of sorted){
@@ -181,7 +217,8 @@
     return dark / total;
   }
 
-  async function extractRowsFromCanvas(canvas, groupLabel){
+  async function extractRowsFromCanvas(rawCanvas, groupLabel){
+    const canvas = preprocessCanvas(rawCanvas);
     const { data } = await worker.recognize(canvas, {}, { blocks: true });
     const lines = flattenLines(data.blocks);
     const rightMargin = canvas.width * 0.03;
